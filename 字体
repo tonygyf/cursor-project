@@ -1,0 +1,3 @@
+self.title_font = pygame.font.SysFont("SimHei", 48)
+        self.info_font = pygame.font.SysFont("SimHei", 36)
+        self.text_font = pygame.font.SysFont("SimHei", 24)
