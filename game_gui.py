@@ -47,9 +47,13 @@ class GameGUI:
         """初始化游戏相关属性"""
         # 缩放属性
         self.scale = 50
-        self.min_scale = 20
-        self.max_scale = 100
+        self.min_scale = 10  # 修改最小缩放比例为 10 (0.2倍)
+        self.max_scale = 150  # 增加最大缩放比例到 150 (3倍)
         self.scale_step = 5
+        
+        # 添加最小窗口尺寸限制
+        self.MIN_WIDTH = 800
+        self.MIN_HEIGHT = 600
         
         # 游戏核心属性
         self.NAIL_RADIUS = 20
@@ -63,6 +67,17 @@ class GameGUI:
         
         # 钉子位置
         self.nail_positions = {}
+
+        # 添加游戏失败窗口属性
+        self.game_over_window = {
+            'visible': False,
+            'color': (240, 240, 240),
+            'border_color': (100, 100, 100),
+            'title': "游戏失败",
+            'message': "无法放入栈中",
+            'button_color': (180, 180, 180),
+            'button_hover_color': (160, 160, 160)
+        }
 
     def init_ui_properties(self):
         """初始化UI相关属性"""
@@ -126,6 +141,13 @@ class GameGUI:
         
         # 更新关卡按钮
         self.update_level_buttons()
+
+        # 添加信息区域属性
+        self.info_area = {
+            'x': 50,
+            'y': 600,
+            'line_height': 25
+        }
 
     def calculate_nail_positions(self):
         """
@@ -520,6 +542,66 @@ class GameGUI:
             self.virtual_surface.blit(text, (self.info_area['x'], info_y))
             info_y += self.info_area['line_height']
 
+    def draw_game_over_window(self):
+        """
+        绘制游戏失败窗口
+        """
+        if not self.game_over_window['visible']:
+            return
+
+        # 绘制半透明背景
+        overlay = pygame.Surface(self.screen.get_size())
+        overlay.fill((0, 0, 0))
+        overlay.set_alpha(128)
+        self.screen.blit(overlay, (0, 0))
+
+        # 计算窗口位置和大小
+        screen_width, screen_height = self.screen.get_size()
+        window_width = 400
+        window_height = 200
+        window_x = (screen_width - window_width) // 2
+        window_y = (screen_height - window_height) // 2
+
+        # 绘制窗口背景
+        window_rect = pygame.Rect(window_x, window_y, window_width, window_height)
+        pygame.draw.rect(self.screen, self.game_over_window['color'], window_rect)
+        pygame.draw.rect(self.screen, self.game_over_window['border_color'], window_rect, 2)
+
+        # 绘制标题
+        title = self.info_font.render(self.game_over_window['title'], True, self.COLORS['BLACK'])
+        title_rect = title.get_rect(midtop=(window_x + window_width // 2, window_y + 20))
+        self.screen.blit(title, title_rect)
+
+        # 绘制消息
+        message = self.text_font.render(self.game_over_window['message'], True, self.COLORS['BLACK'])
+        message_rect = message.get_rect(midtop=(window_x + window_width // 2, window_y + 80))
+        self.screen.blit(message, message_rect)
+
+        # 绘制重新开始按钮
+        button_width = 160
+        button_height = 40
+        button_x = window_x + (window_width - button_width) // 2
+        button_y = window_y + window_height - 60
+        
+        self.game_over_window['restart_button'] = pygame.Rect(
+            button_x, button_y, button_width, button_height
+        )
+        
+        # 检查鼠标悬停
+        mouse_pos = pygame.mouse.get_pos()
+        button_color = (self.game_over_window['button_hover_color'] 
+                       if self.game_over_window['restart_button'].collidepoint(mouse_pos) 
+                       else self.game_over_window['button_color'])
+        
+        pygame.draw.rect(self.screen, button_color, self.game_over_window['restart_button'])
+        pygame.draw.rect(self.screen, self.game_over_window['border_color'], 
+                        self.game_over_window['restart_button'], 2)
+
+        # 绘制按钮文字
+        button_text = self.text_font.render("重新开始", True, self.COLORS['BLACK'])
+        button_text_rect = button_text.get_rect(center=self.game_over_window['restart_button'].center)
+        self.screen.blit(button_text, button_text_rect)
+
     def handle_click(self, pos):
         """
         处理点击事件
@@ -542,17 +624,23 @@ class GameGUI:
 
             for button in self.level_buttons:
                 if button['rect'].collidepoint(pos):
-                    # 修改这里：直接使用关卡配置
                     level_num = button['level']
                     if level_num in LEVELS:
                         self.current_level = level_num
-                        self.game = NailGame(level_num)  # 只传入关卡编号
+                        self.game = NailGame(level_num)
                         self.calculate_nail_positions()
                         self.level_select_visible = False
                     return
 
             if not any(button['rect'].collidepoint(pos) for button in self.level_buttons):
                 self.level_select_visible = False
+            return
+
+        # 如果游戏失败窗口可见，优先处理其点击
+        if self.game_over_window['visible']:
+            if 'restart_button' in self.game_over_window and \
+               self.game_over_window['restart_button'].collidepoint(pos):
+                self.restart_game()
             return
 
         # 处理固定按钮的点击
@@ -598,9 +686,26 @@ class GameGUI:
         """
         处理游戏结束
         """
-        print("游戏结束！无法放入栈中")
-        pygame.quit()
-        sys.exit()
+        self.game_over_window['visible'] = True
+
+    def restart_game(self):
+        """
+        重新开始当前关卡
+        """
+        # 重新初始化游戏
+        self.game = NailGame(self.current_level)
+        
+        # 重置UI状态
+        self.scroll_x = 0
+        self.scroll_y = 0
+        self.is_dragging_h = False
+        self.is_dragging_v = False
+        
+        # 重新计算钉子位置
+        self.calculate_nail_positions()
+        
+        # 隐藏游戏失败窗口
+        self.game_over_window['visible'] = False
 
     def update_scrollbars(self):
         """
@@ -671,7 +776,11 @@ class GameGUI:
         """
         new_width = max(self.MIN_WIDTH, event.w)
         new_height = max(self.MIN_HEIGHT, event.h)
-        self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
+        # 使用 RESIZABLE | DOUBLEBUF 标志来优化全屏切换
+        self.screen = pygame.display.set_mode(
+            (new_width, new_height), 
+            pygame.RESIZABLE | pygame.DOUBLEBUF
+        )
         self.update_scrollbars()
 
     def draw_scrollbars(self):
@@ -791,6 +900,8 @@ class GameGUI:
         """
         运行游戏主循环
         """
+        clock = pygame.time.Clock()  # 添加时钟对象控制帧率
+        
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -803,12 +914,25 @@ class GameGUI:
                     if self.handle_scale(event):
                         continue
                     # 处理其他鼠标事件
+                    if self.handle_help_window_scroll(event):  # 先检查帮助窗口的滚动
+                        continue
                     self.handle_scroll(event)
                     if event.type == pygame.MOUSEBUTTONDOWN:
                         self.handle_click(event.pos)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_F11:
-                        pygame.display.toggle_fullscreen()
+                        # 改进全屏切换逻辑
+                        is_fullscreen = bool(pygame.display.get_surface().get_flags() & pygame.FULLSCREEN)
+                        if is_fullscreen:
+                            self.screen = pygame.display.set_mode(
+                                (self.MIN_WIDTH, self.MIN_HEIGHT),
+                                pygame.RESIZABLE | pygame.DOUBLEBUF
+                            )
+                        else:
+                            self.screen = pygame.display.set_mode(
+                                (0, 0),  # 使用当前显示器分辨率
+                                pygame.FULLSCREEN | pygame.DOUBLEBUF
+                            )
                     elif event.key == pygame.K_ESCAPE and self.help_window['visible']:
                         self.help_window['visible'] = False
 
@@ -822,6 +946,14 @@ class GameGUI:
             # 将虚拟表面的可见部分绘制到实际屏幕上
             screen_width, screen_height = self.screen.get_size()
             self.screen.fill(self.COLORS['WHITE'])
+            
+            # 修正滚动范围
+            max_scroll_x = max(0, self.virtual_width - screen_width + self.scrollbar_width)
+            max_scroll_y = max(0, self.virtual_height - screen_height + self.scrollbar_width)
+            self.scroll_x = min(max_scroll_x, max(0, self.scroll_x))
+            self.scroll_y = min(max_scroll_y, max(0, self.scroll_y))
+            
+            # 绘制虚拟表面
             self.screen.blit(
                 self.virtual_surface,
                 (0, 0),
@@ -844,10 +976,15 @@ class GameGUI:
             # 在最后绘制关卡选择界面
             self.draw_level_select()
             
+            # 在最后绘制游戏失败窗口
+            if self.game_over_window['visible']:
+                self.draw_game_over_window()
+            
             # 在最后绘制缩放信息
             self.draw_scale_info()
             
             pygame.display.flip()
+            clock.tick(60)  # 限制帧率为60FPS
 
 def main():
     game_gui = GameGUI()
