@@ -739,7 +739,7 @@ class GameGUI:
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             # 检查是否点击滚动条
-            if event.button == 1:
+            if event.button == 1:  # 鼠标左键点击
                 if self.h_scrollbar_rect.collidepoint(event.pos):
                     self.is_dragging_h = True
                     self.scroll_start_x = event.pos[0] - self.h_scrollbar_rect.x
@@ -749,9 +749,17 @@ class GameGUI:
 
             # 鼠标滚轮滚动
             elif event.button == 4:  # 向上滚动
-                self.scroll_y = max(0, self.scroll_y - 30)
+                if pygame.key.get_mods() & pygame.KMOD_SHIFT:  # 按住Shift键进行水平滚动
+                    self.scroll_x = max(0, self.scroll_x - 30)
+                else:
+                    self.scroll_y = max(0, self.scroll_y - 30)
             elif event.button == 5:  # 向下滚动
-                self.scroll_y = min(self.virtual_height - screen_height, self.scroll_y + 30)
+                if pygame.key.get_mods() & pygame.KMOD_SHIFT:  # 按住Shift键进行水平滚动
+                    self.scroll_x = min(self.virtual_width - screen_width + self.scrollbar_width, 
+                                      self.scroll_x + 30)
+                else:
+                    self.scroll_y = min(self.virtual_height - screen_height + self.scrollbar_width, 
+                                      self.scroll_y + 30)
 
         elif event.type == pygame.MOUSEBUTTONUP:
             self.is_dragging_h = False
@@ -759,117 +767,27 @@ class GameGUI:
 
         elif event.type == pygame.MOUSEMOTION:
             if self.is_dragging_h:
-                new_x = event.pos[0] - self.scroll_start_x
+                # 计算水平滚动条的最大移动范围
                 max_scroll = screen_width - self.h_scrollbar_rect.width - self.scrollbar_width
-                new_x = max(0, min(new_x, max_scroll))
-                self.scroll_x = int((new_x / max_scroll) * (self.virtual_width - screen_width))
+                if max_scroll > 0:  # 确保有可滚动空间
+                    new_x = event.pos[0] - self.scroll_start_x
+                    new_x = max(0, min(new_x, max_scroll))
+                    # 计算实际内容的滚动位置
+                    self.scroll_x = int((new_x / max_scroll) * 
+                                      (self.virtual_width - screen_width + self.scrollbar_width))
 
             if self.is_dragging_v:
-                new_y = event.pos[1] - self.scroll_start_y
+                # 计算垂直滚动条的最大移动范围
                 max_scroll = screen_height - self.v_scrollbar_rect.height - self.scrollbar_width
-                new_y = max(0, min(new_y, max_scroll))
-                self.scroll_y = int((new_y / max_scroll) * (self.virtual_height - screen_height))
+                if max_scroll > 0:  # 确保有可滚动空间
+                    new_y = event.pos[1] - self.scroll_start_y
+                    new_y = max(0, min(new_y, max_scroll))
+                    # 计算实际内容的滚动位置
+                    self.scroll_y = int((new_y / max_scroll) * 
+                                      (self.virtual_height - screen_height + self.scrollbar_width))
 
-    def handle_resize(self, event):
-        """
-        处理窗口大小调整
-        """
-        new_width = max(self.MIN_WIDTH, event.w)
-        new_height = max(self.MIN_HEIGHT, event.h)
-        # 使用 RESIZABLE | DOUBLEBUF 标志来优化全屏切换
-        self.screen = pygame.display.set_mode(
-            (new_width, new_height), 
-            pygame.RESIZABLE | pygame.DOUBLEBUF
-        )
-        self.update_scrollbars()
-
-    def draw_scrollbars(self):
-        """
-        绘制滚动条，添加鼠标悬停和拖动效果
-        """
-        screen_width, screen_height = self.screen.get_size()
-        mouse_pos = pygame.mouse.get_pos()
-        
-        # 水平滚动条
-        if self.h_scrollbar_rect.collidepoint(mouse_pos):
-            color = self.scrollbar_hover_color if not self.is_dragging_h else self.scrollbar_drag_color
-        else:
-            color = self.scrollbar_color
-        pygame.draw.rect(self.screen, color, self.h_scrollbar_rect)
-        
-        # 垂直滚动条
-        if self.v_scrollbar_rect.collidepoint(mouse_pos):
-            color = self.scrollbar_hover_color if not self.is_dragging_v else self.scrollbar_drag_color
-        else:
-            color = self.scrollbar_color
-        pygame.draw.rect(self.screen, color, self.v_scrollbar_rect)
-
-    def handle_help_window_scroll(self, event):
-        """
-        处理帮助窗口的滚动
-        """
-        if not self.help_window['visible']:
-            return False
-            
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            if event.button == 4:  # 向上滚动
-                self.help_window['scroll_y'] = max(
-                    0, 
-                    self.help_window['scroll_y'] - self.help_window['scroll_speed']
-                )
-                return True
-            elif event.button == 5:  # 向下滚动
-                self.help_window['scroll_y'] = min(
-                    500,  # 最大滚动距离
-                    self.help_window['scroll_y'] + self.help_window['scroll_speed']
-                )
-                return True
-        return False
-
-    def handle_scale(self, event):
-        """
-        处理缩放事件
-        """
-        if event.type == pygame.MOUSEBUTTONDOWN and pygame.key.get_mods() & pygame.KMOD_CTRL:
-            # 获取当前鼠标位置
-            mouse_x, mouse_y = pygame.mouse.get_pos()
-            # 转换为虚拟表面坐标
-            virtual_x = mouse_x + self.scroll_x
-            virtual_y = mouse_y + self.scroll_y
-            
-            old_scale = self.scale
-            
-            # 向上滚动放大，向下滚动缩小
-            if event.button == 4:  # 滚轮向上
-                self.scale = min(self.max_scale, self.scale + self.scale_step)
-            elif event.button == 5:  # 滚轮向下
-                self.scale = max(self.min_scale, self.scale - self.scale_step)
-            
-            # 如果缩放发生变化
-            if old_scale != self.scale:
-                # 记住缩放中心点（鼠标位置）相对于基准点的比例
-                if self.nail_positions:
-                    base_x, base_y = next(iter(self.nail_positions.values()))
-                    rel_x = (virtual_x - base_x) / old_scale
-                    rel_y = (virtual_y - base_y) / old_scale
-                    
-                    # 重新计算位置
-                    self.calculate_nail_positions()
-                    
-                    # 调整滚动位置以保持鼠标指向的点不变
-                    if self.nail_positions:
-                        new_base_x, new_base_y = next(iter(self.nail_positions.values()))
-                        new_x = new_base_x + rel_x * self.scale
-                        new_y = new_base_y + rel_y * self.scale
-                        
-                        # 更新滚动位置
-                        self.scroll_x += new_x - virtual_x
-                        self.scroll_y += new_y - virtual_y
-                        
-                        # 确保滚动范围有效
-                        self.clamp_scroll()
-                return True
-        return False
+            # 确保滚动范围有效
+            self.clamp_scroll()
 
     def clamp_scroll(self):
         """
@@ -895,6 +813,27 @@ class GameGUI:
             self.COLORS['BLACK']
         )
         self.screen.blit(scale_text, (10, self.screen.get_height() - 30))
+
+    def draw_scrollbars(self):
+        """
+        绘制滚动条，添加鼠标悬停和拖动效果
+        """
+        screen_width, screen_height = self.screen.get_size()
+        mouse_pos = pygame.mouse.get_pos()
+        
+        # 水平滚动条
+        if self.h_scrollbar_rect.collidepoint(mouse_pos):
+            color = self.scrollbar_hover_color if not self.is_dragging_h else self.scrollbar_drag_color
+        else:
+            color = self.scrollbar_color
+        pygame.draw.rect(self.screen, color, self.h_scrollbar_rect)
+        
+        # 垂直滚动条
+        if self.v_scrollbar_rect.collidepoint(mouse_pos):
+            color = self.scrollbar_hover_color if not self.is_dragging_v else self.scrollbar_drag_color
+        else:
+            color = self.scrollbar_color
+        pygame.draw.rect(self.screen, color, self.v_scrollbar_rect)
 
     def run(self):
         """
@@ -985,6 +924,86 @@ class GameGUI:
             
             pygame.display.flip()
             clock.tick(60)  # 限制帧率为60FPS
+
+    def handle_help_window_scroll(self, event):
+        """
+        处理帮助窗口的滚动
+        """
+        if not self.help_window['visible']:
+            return False
+            
+        if event.type == pygame.MOUSEBUTTONDOWN:
+            if event.button == 4:  # 向上滚动
+                self.help_window['scroll_y'] = max(
+                    0, 
+                    self.help_window['scroll_y'] - self.help_window['scroll_speed']
+                )
+                return True
+            elif event.button == 5:  # 向下滚动
+                self.help_window['scroll_y'] = min(
+                    500,  # 最大滚动距离
+                    self.help_window['scroll_y'] + self.help_window['scroll_speed']
+                )
+                return True
+        return False
+
+    def handle_scale(self, event):
+        """
+        处理缩放事件
+        """
+        if event.type == pygame.MOUSEBUTTONDOWN and pygame.key.get_mods() & pygame.KMOD_CTRL:
+            # 获取当前鼠标位置
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            # 转换为虚拟表面坐标
+            virtual_x = mouse_x + self.scroll_x
+            virtual_y = mouse_y + self.scroll_y
+            
+            old_scale = self.scale
+            
+            # 向上滚动放大，向下滚动缩小
+            if event.button == 4:  # 滚轮向上
+                self.scale = min(self.max_scale, self.scale + self.scale_step)
+            elif event.button == 5:  # 滚轮向下
+                self.scale = max(self.min_scale, self.scale - self.scale_step)
+            
+            # 如果缩放发生变化
+            if old_scale != self.scale:
+                # 记住缩放中心点（鼠标位置）相对于基准点的比例
+                if self.nail_positions:
+                    base_x, base_y = next(iter(self.nail_positions.values()))
+                    rel_x = (virtual_x - base_x) / old_scale
+                    rel_y = (virtual_y - base_y) / old_scale
+                    
+                    # 重新计算位置
+                    self.calculate_nail_positions()
+                    
+                    # 调整滚动位置以保持鼠标指向的点不变
+                    if self.nail_positions:
+                        new_base_x, new_base_y = next(iter(self.nail_positions.values()))
+                        new_x = new_base_x + rel_x * self.scale
+                        new_y = new_base_y + rel_y * self.scale
+                        
+                        # 更新滚动位置
+                        self.scroll_x += new_x - virtual_x
+                        self.scroll_y += new_y - virtual_y
+                        
+                        # 确保滚动范围有效
+                        self.clamp_scroll()
+                return True
+        return False
+
+    def handle_resize(self, event):
+        """
+        处理窗口大小调整
+        """
+        new_width = max(self.MIN_WIDTH, event.w)
+        new_height = max(self.MIN_HEIGHT, event.h)
+        # 使用 RESIZABLE | DOUBLEBUF 标志来优化全屏切换
+        self.screen = pygame.display.set_mode(
+            (new_width, new_height), 
+            pygame.RESIZABLE | pygame.DOUBLEBUF
+        )
+        self.update_scrollbars()
 
 def main():
     game_gui = GameGUI()
